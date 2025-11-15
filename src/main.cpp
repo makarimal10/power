@@ -59,9 +59,8 @@ struct interval {
 
 
 struct time_reset{
-  uint32_t tanggal_reset = 25;
-  uint32_t bulan_reset = 0;
-  bool is_reset = false;
+  uint8_t last_reset_daily = 0;
+  uint8_t last_reset_monthly = 0;
 } time_reset;
 
 enum powermmeter_status {
@@ -73,6 +72,11 @@ enum powermmeter_status {
 
 bool showWaktu = true;            // true = tampilkan waktu, false = tampilkan data
 bool lastDisplayState = true;
+
+float last_valid_voltage = 0;
+float last_valid_current = 0;
+float last_valid_power   = 0;
+float last_valid_energy  = 0;
 
 void reconnect();
 void callback(char *topic, byte* message, unsigned int length);
@@ -88,6 +92,9 @@ void lcd_show(uint8_t cursor_x, uint8_t cursor_y, String text);
 
 void setup() {
   Serial.begin(115200);
+  Serial2.begin(9600);
+  delay(500);
+
   ESP_LOGI(TAG, "Setup started");
 
   pinMode(PIN_RELAY, OUTPUT);
@@ -109,6 +116,7 @@ void setup() {
     esp_restart();
     ESP_LOGE(TAG, "Failed to mount LittleFS");
   }
+  lcd.clear();
 
   WiFi.begin(ssid, password);
   secureClient.setInsecure();
@@ -135,9 +143,8 @@ void setup() {
 
   data.last_konsumsi_harian = file_readFloat("/last_konsumsi_harian.f");
   data.last_konsumsi_bulanan = file_readFloat("/last_konsumsi_bulanan.f");
-  time_reset.tanggal_reset = file_readInt("/tanggal_reset.i");
-  time_reset.bulan_reset = file_readInt("/bulan_reset.i");
-  time_reset.is_reset = file_readInt("/is_reset.i") == 1 ? true : false;
+  time_reset.last_reset_daily = file_readInt("/last_reset_daily.i");
+  time_reset.last_reset_monthly = file_readInt("/last_reset_monthly.i");
 }
 
 
@@ -146,14 +153,37 @@ void loop() {
     reconnect();
   }
   mqtt.loop();
-
+  
   DateTime now = rtc.now();
+  
+  float v = pzem.voltage();
+  float i = pzem.current();
+  float p = pzem.power();
+  float e = pzem.energy();
 
-  data.tegangan = isnan(pzem.voltage()) ? 0 : pzem.voltage();
-  data.arus = isnan(pzem.current()) ? 0 : pzem.current();
-  data.daya = isnan(pzem.power()) ? 0 : pzem.power();
-  data.konsumsi_harian = data.last_konsumsi_harian + (isnan(pzem.energy()) ? 0 : pzem.energy());
-  data.konsumsi_bulanan = data.last_konsumsi_bulanan + (isnan(pzem.energy()) ? 0 : pzem.energy());
+  bool validV = !isnan(v) && v >= 0.0 && v <= 260.0;
+  bool validI = !isnan(i) && i >= 0.0  && i <= 100.0;
+  bool validP = !isnan(p) && p >= 0.0  && p <= 5000.0;
+  bool validE = !isnan(e) && e >= 0.0  && e < 100000.0;  // energy cumulative
+
+  if (last_valid_voltage > 0 && fabs(v - last_valid_voltage) > 200) validV = false;
+  if (last_valid_current > 0 && fabs(i - last_valid_current) > 50)  validI = false;
+  if (last_valid_power   > 0 && fabs(p - last_valid_power)   > 1000) validP = false;
+
+  data.tegangan = validV ? (last_valid_voltage = v) : last_valid_voltage;
+  data.arus     = validI ? (last_valid_current = i) : last_valid_current;
+  data.daya     = validP ? (last_valid_power   = p) : last_valid_power;
+
+  if (validE) {
+      last_valid_energy = e;
+      data.konsumsi_harian  = data.last_konsumsi_harian  + e;
+      data.konsumsi_bulanan = data.last_konsumsi_bulanan + e;
+  } else {
+      data.konsumsi_harian  = data.last_konsumsi_harian  + last_valid_energy;
+      data.konsumsi_bulanan = data.last_konsumsi_bulanan + last_valid_energy;
+  }
+  
+  ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, konsumsi harian: %2f, konsumsi bulanan: %2f", data.arus, data.tegangan, data.daya, data.konsumsi_harian, data.konsumsi_bulanan);
   
   /*  INTRUKSI RELAY  */
   switch (state){
@@ -170,7 +200,6 @@ void loop() {
     if (millis() - interval.standby >= 60000UL){
       state = tidak_digunakan;
       interval.standby = 0;
-      digitalWrite(PIN_RELAY, LOW);
     }
     break;
 
@@ -182,12 +211,18 @@ void loop() {
       }
       if (millis() - interval.standby >= 60000UL){
         state = tidak_digunakan;
-        digitalWrite(PIN_RELAY, LOW);
       }
     }
+    else{
+      interval.timer = false;
+    }
+
     if (data.konsumsi_harian >= BATAS_KONSUMSI_HARIAN){
       state = maksimal;
-      digitalWrite(PIN_RELAY, LOW);
+    }
+
+    if (data.konsumsi_bulanan >= BATAS_KONSUMSI_BULANAN){
+      state = maksimal;
     }
     break;
 
@@ -200,31 +235,27 @@ void loop() {
     break;
   }
 
+  ESP_LOGI(TAG, "status: %s, timer: %d, interval stanndby: %d", status_to_str(state), interval.timer, interval.standby);
 
-  /*  RESET DATA HANDLE */
-  if (now.day() == time_reset.tanggal_reset && time_reset.is_reset == false){
-    if (now.hour() == 0 && now.minute() == 0 && now.second() < 10){
-      time_reset.is_reset = true;
-      file_write("/is_reset.i", time_reset.is_reset ? 1 : 0);
+  /*  RESET HARIAN */
+  if (now.day() != time_reset.last_reset_daily){
+    ESP_LOGI(TAG, "Berhasil reset data harian");
 
-      data.last_konsumsi_bulanan = 0;
-      data.last_konsumsi_harian = 0;
-      file_write("/last_konsumsi_harian.f", data.last_konsumsi_harian);
-      file_write("/last_konsumsi_bulanan.f", data.last_konsumsi_bulanan);
-      time_reset.bulan_reset = now.month();
-      file_write("/tanggal_reset.i", time_reset.tanggal_reset);
-      file_write("/bulan_reset.i", time_reset.bulan_reset);
-      ESP_LOGI(TAG, "Reset konsumsi harian & bulanan");
-    }
-    else{
-      ESP_LOGI(TAG, "Sudah melakukan Reset...");
-    }
-  }
-  else if (now.day() != time_reset.tanggal_reset && time_reset.is_reset == true){
-    time_reset.is_reset = false;
-    file_write("/is_reset.i", time_reset.is_reset ? 1 : 0);
+    data.last_konsumsi_harian = 0;
+    time_reset.last_reset_daily = now.day();
+    file_write("/last_konsumsi_harian.f", data.last_konsumsi_harian);
+    file_write("/last_reset_daily.i", now.day());
   }
 
+  /*  RESET BULANAN */
+  if (now.month() != time_reset.last_reset_monthly){
+    ESP_LOGI(TAG, "Berhasil reset data bulanan");
+
+    data.last_konsumsi_bulanan = 0;
+    time_reset.last_reset_monthly = now.month();
+    file_write("/last_konsumsi_bulanan.f", data.last_konsumsi_bulanan);
+    file_write("/last_reset_monthly.i", now.month());
+  }
 
   /* MQTT & DATABASE  */
   if (millis() - interval.last_upload > interval.upload_data * 1000UL){
@@ -275,7 +306,7 @@ void loop() {
 
 
  /*   FORMAT SETTING JAM = TAHUN-BULAN-TANGGAL JAM:MENIT:DETIK 
-       example: 2025-03-20 10:06:17
+       example: 2025-11-15 16:41:20
        kirim via serial monitor                                   */
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
@@ -321,6 +352,8 @@ void reconnect() {
       lcd_show(0,0,"MQTT: Connected");
       mqtt.subscribe("powermeter/button");
       mqtt.publish("powermeter/status", "online",true);
+      delay(1000);
+      lcd.clear();
       break;
     } 
     else {
