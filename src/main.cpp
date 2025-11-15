@@ -151,8 +151,8 @@ void loop() {
   data.tegangan = isnan(pzem.voltage()) ? 0 : pzem.voltage();
   data.arus = isnan(pzem.current()) ? 0 : pzem.current();
   data.daya = isnan(pzem.power()) ? 0 : pzem.power();
-  data.konsumsi_harian = data.last_konsumsi_harian + pzem.energy();
-  data.konsumsi_bulanan = data.last_konsumsi_bulanan + pzem.energy();
+  data.konsumsi_harian = data.last_konsumsi_harian + (isnan(pzem.energy()) ? 0 : pzem.energy());
+  data.konsumsi_bulanan = data.last_konsumsi_bulanan + (isnan(pzem.energy()) ? 0 : pzem.energy());
   
   /*  INTRUKSI RELAY  */
   switch (state){
@@ -313,11 +313,13 @@ void reconnect() {
 
     lcd_show(0,0,"MQTT: Connecting");
     // connect dengan username & password dan clientId unik
-    if (mqtt.connect(clientId.c_str(), mqtt_username, mqtt_password)) {
+    if (mqtt.connect(clientId.c_str(), mqtt_username, mqtt_password,
+                      "powermeter/status", 1, true, "offline")) {
       lcd.clear();
       ESP_LOGI(TAG,"MQTT Connected");
       lcd_show(0,0,"MQTT: Connected");
       mqtt.subscribe("powermeter/button");
+      mqtt.publish("powermeter/status", "online",true);
       break;
     } 
     else {
