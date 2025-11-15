@@ -45,6 +45,7 @@ struct powermeter_data{
   float konsumsi_bulanan = 0;
   float last_konsumsi_harian = 0;
   float last_konsumsi_bulanan = 0; 
+  char state[10];
 } data;
 
 struct interval {
@@ -76,7 +77,7 @@ bool lastDisplayState = true;
 void reconnect();
 void callback(char *topic, byte* message, unsigned int length);
 void dbSendData(String path, String data, String timestamp);
-
+const char* status_to_str(powermmeter_status state);
 
 bool file_write(String path, float value);
 float file_readFloat(String path);
@@ -229,7 +230,7 @@ void loop() {
   if (millis() - interval.last_upload > interval.upload_data * 1000UL){
     
     char payload[128];
-    sprintf(payload, "{\"arus\":%.3f,\"tegangan\":%.2f,\"daya\":%.2f,\"konsumsi_harian\":%.3f,\"konsumsi_bulanan\":%.3f}", data.arus, data.tegangan, data.daya, data.konsumsi_harian, data.konsumsi_bulanan);
+    sprintf(payload, "{\"arus\":%.3f,\"tegangan\":%.2f,\"daya\":%.2f,\"konsumsi_harian\":%.3f,\"konsumsi_bulanan\":%.3f,\"device_state\":%s}", data.arus, data.tegangan, data.daya, data.konsumsi_harian, data.konsumsi_bulanan, status_to_str(state));
     mqtt.publish("powermeter/data", payload);
 
     char time_header[20];
@@ -424,4 +425,19 @@ int file_readInt(String path){
   String content = file.readStringUntil('\n');
   file.close();
   return content.toInt();
+}
+
+const char* status_to_str(powermmeter_status state){
+  switch(state){
+    case standby:
+      return "standby";
+    case digunakan:
+      return "digunakan";
+    case tidak_digunakan:
+      return "tidak digunakan";
+    case maksimal:
+      return "maksimal";
+    default:
+      return "unknown status";
+  }
 }
