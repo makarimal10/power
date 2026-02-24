@@ -40,6 +40,7 @@ struct powermeter_data{
   float tegangan = 0;
   float arus = 0;
   float daya = 0;
+  float energi = 0;
   float konsumsi_bulanan = 0;
   float last_konsumsi_bulanan = 0; 
   char state[10];
@@ -170,8 +171,10 @@ void loop() {
 
   if (validE) {
       last_valid_energy = e;
+      data.energi = e;
       data.konsumsi_bulanan = data.last_konsumsi_bulanan + e;
   } else {
+      data.energi = last_valid_energy;
       data.konsumsi_bulanan = data.last_konsumsi_bulanan + last_valid_energy;
   }
   
@@ -230,7 +233,9 @@ void loop() {
   if (millis() - interval.last_upload > interval.upload_data * 1000UL){
     
     char payload[128];
-    sprintf(payload, "{\"arus\":%.3f,\"tegangan\":%.2f,\"daya\":%.2f,\"konsumsi_bulanan\":%.3f,\"device_state\":\"%s\"}", data.arus, data.tegangan, data.daya, data.konsumsi_bulanan, status_to_str(state));
+    sprintf(payload, "{\"arus\":%.3f,\"tegangan\":%.2f,\"daya\":%.2f,\"energi\":%.2f,\"konsumsi_bulanan\":%.3f,\"device_state\":\"%s\"}", 
+      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_bulanan, status_to_str(state));
+    
     mqtt.publish("powermeter/data", payload);
 
     char time_header[20];
@@ -267,7 +272,7 @@ void loop() {
     char row_1[17];
     sprintf(row_1, "V:%.1f I:%.3f", data.tegangan, data.arus);
     char row_2[17];
-    sprintf(row_2, "P:%.2f K:%.3f", data.daya, data.konsumsi_bulanan);
+    sprintf(row_2, "P:%.2f E:%.3f", data.daya, data.energi);
     lcd_show(0, 0, row_1);
     lcd_show(0, 1, row_2);
   }
