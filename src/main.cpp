@@ -32,7 +32,7 @@ RTC_DS3231 rtc;
 
 /*   HYPERPARAMETER   */
 #define BATAS_KONSUMSI_BULANAN 14900   //Wh
-#define ARUS_STANDBY 0.001
+#define DAYA_STANDBY 0.5
 
 
 
@@ -189,7 +189,7 @@ void loop() {
       interval.timer = false;
       digitalWrite(PIN_RELAY, HIGH);
     }
-    if (data.arus > ARUS_STANDBY){
+    if (data.arus > DAYA_STANDBY){
       state = digunakan;
     }
     if (millis() - interval.standby >= 60000UL){
@@ -198,7 +198,7 @@ void loop() {
     break;
 
   case digunakan:
-    if (data.arus <= ARUS_STANDBY){
+    if (data.arus <= DAYA_STANDBY){
       state = standby;
       interval.timer = true;
     }
