@@ -189,7 +189,7 @@ void loop() {
       interval.timer = false;
       digitalWrite(PIN_RELAY, HIGH);
     }
-    if (data.arus > DAYA_STANDBY){
+    if (data.daya > DAYA_STANDBY){
       state = digunakan;
     }
     if (millis() - interval.standby >= 60000UL){
@@ -198,7 +198,7 @@ void loop() {
     break;
 
   case digunakan:
-    if (data.arus <= DAYA_STANDBY){
+    if (data.daya <= DAYA_STANDBY){
       state = standby;
       interval.timer = true;
     }
