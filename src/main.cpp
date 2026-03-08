@@ -32,7 +32,7 @@ RTC_DS3231 rtc;
 
 /*   HYPERPARAMETER   */
 #define BATAS_KONSUMSI_BULANAN 14900   //Wh
-#define DAYA_STANDBY 0.5
+#define DAYA_STANDBY 1.2
 
 
 
@@ -74,6 +74,8 @@ float last_valid_voltage = 0;
 float last_valid_current = 0;
 float last_valid_power   = 0;
 float last_valid_energy  = 0;
+float corresion_factor_energy = 0;
+bool get_corresion_factor_energy = true;
 
 void reconnect();
 void callback(char *topic, byte* message, unsigned int length);
@@ -140,6 +142,11 @@ void setup() {
 
   data.last_konsumsi_bulanan = file_readFloat("/last_konsumsi_bulanan.f");
   time_reset.last_reset_monthly = file_readInt("/last_reset_monthly.i");
+
+  if(!pzem.resetEnergy()){
+    ESP_LOGE(TAG, "Failed to reset energy");
+  }
+  vTaskDelay(1000/portTICK_PERIOD_MS);
 }
 
 
@@ -150,11 +157,20 @@ void loop() {
   mqtt.loop();
   
   DateTime now = rtc.now();
+
+  if(get_corresion_factor_energy){
+    float energy = pzem.energy();
+    if(!isnan(energy) && energy > 0){
+      corresion_factor_energy = energy;
+      ESP_LOGI(TAG, "corresion_factor_energy: %f", corresion_factor_energy);
+      get_corresion_factor_energy = false;
+    }
+  }  
   
   float v = pzem.voltage();
   float i = pzem.current();
   float p = pzem.power();
-  float e = pzem.energy();
+  float e = pzem.energy() - corresion_factor_energy;
 
   bool validV = !isnan(v) && v >= 0.0 && v <= 260.0;
   bool validI = !isnan(i) && i >= 0.0  && i <= 100.0;
@@ -177,8 +193,9 @@ void loop() {
       data.energi = last_valid_energy;
       data.konsumsi_bulanan = data.last_konsumsi_bulanan + last_valid_energy;
   }
-  
-  ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, konsumsi bulanan: %2f", data.arus, data.tegangan, data.daya, data.konsumsi_bulanan);
+  // ESP_LOGI(TAG, "e: %f, corresion_factor_energy: %f, energi: %f, konsumsi_bulanan: %f", e, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
+  // ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, konsumsi bulanan: %2f",
+  //    data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
   
   /*  INTRUKSI RELAY  */
   switch (state){
