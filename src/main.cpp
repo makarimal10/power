@@ -31,7 +31,8 @@ PZEM004Tv30 pzem(Serial2, 16, 17);
 RTC_DS3231 rtc;
 
 /*   HYPERPARAMETER   */
-#define BATAS_KONSUMSI_BULANAN 14900   //Wh
+#define BATAS_KONSUMSI_BULANAN 14.9   //KWh
+#define BATAS_KONSUMSI_HARIAN 0.5     //KWh
 #define DAYA_STANDBY 1.2
 
 
@@ -42,7 +43,9 @@ struct powermeter_data{
   float daya = 0;
   float energi = 0;
   float konsumsi_bulanan = 0;
+  float konsumsi_harian = 0;
   float last_konsumsi_bulanan = 0; 
+  float last_konsumsi_harian = 0;
   char state[10];
 } data;
 
@@ -58,6 +61,7 @@ struct interval {
 
 struct time_reset{
   uint8_t last_reset_monthly = 0;
+  uint8_t last_reset_harian = 0;
 } time_reset;
 
 enum powermmeter_status {
@@ -141,11 +145,10 @@ void setup() {
   interval.timer = true;
 
   data.last_konsumsi_bulanan = file_readFloat("/last_konsumsi_bulanan.f");
+  data.last_konsumsi_harian = file_readFloat("/last_konsumsi_harian.f");
   time_reset.last_reset_monthly = file_readInt("/last_reset_monthly.i");
-
-  if(!pzem.resetEnergy()){
-    ESP_LOGE(TAG, "Failed to reset energy");
-  }
+  time_reset.last_reset_harian = file_readInt("/last_reset_harian.i");
+  
   vTaskDelay(1000/portTICK_PERIOD_MS);
 }
 
@@ -194,8 +197,8 @@ void loop() {
       data.konsumsi_bulanan = data.last_konsumsi_bulanan + last_valid_energy;
   }
   // ESP_LOGI(TAG, "e: %f, corresion_factor_energy: %f, energi: %f, konsumsi_bulanan: %f", e, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
-  // ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, konsumsi bulanan: %2f",
-  //    data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
+  ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, konsumsi bulanan: %2f",
+     data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
   
   /*  INTRUKSI RELAY  */
   switch (state){
@@ -223,6 +226,10 @@ void loop() {
     if (data.konsumsi_bulanan >= BATAS_KONSUMSI_BULANAN){
       state = maksimal;
     }
+
+    if (data.konsumsi_harian >= BATAS_KONSUMSI_HARIAN){
+      state = maksimal;
+    }
     break;
 
   case tidak_digunakan:
@@ -246,12 +253,21 @@ void loop() {
     file_write("/last_reset_monthly.i", now.month());
   }
 
+  /*  RESET HARIAN  */
+  if (now.day() != time_reset.last_reset_harian){
+    data.konsumsi_harian = 0;
+    time_reset.last_reset_harian = now.day();
+
+    file_write("/last_reset_harian.i", now.day());
+    file_write("/last_konsumsi_harian.f", data.konsumsi_harian);
+  }
+
   /* MQTT & DATABASE  */
   if (millis() - interval.last_upload > interval.upload_data * 1000UL){
     
-    char payload[128];
-    sprintf(payload, "{\"arus\":%.3f,\"tegangan\":%.2f,\"daya\":%.2f,\"energi\":%.2f,\"konsumsi_bulanan\":%.3f,\"device_state\":\"%s\"}", 
-      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_bulanan, status_to_str(state));
+    char payload[256];
+    snprintf(payload, sizeof(payload), "{\"arus\":%f,\"tegangan\":%f,\"daya\":%f,\"energi\":%f,\"konsumsi_harian\":%f,\"konsumsi_bulanan\":%f,\"timestamp\":\"%s\",\"device_state\":\"%s\"}", 
+      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_harian, data.konsumsi_bulanan, now.timestamp().c_str(), status_to_str(state));
     
     mqtt.publish("powermeter/data", payload);
 
