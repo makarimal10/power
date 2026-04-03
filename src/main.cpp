@@ -79,6 +79,7 @@ float last_valid_current = 0;
 float last_valid_power   = 0;
 float last_valid_energy  = 0;
 float corresion_factor_energy = 0;
+float cirresion_factor_current = 0.1;
 bool get_corresion_factor_energy = true;
 
 void reconnect();
@@ -148,7 +149,7 @@ void setup() {
   data.last_konsumsi_harian = file_readFloat("/last_konsumsi_harian.f");
   time_reset.last_reset_monthly = file_readInt("/last_reset_monthly.i");
   time_reset.last_reset_harian = file_readInt("/last_reset_harian.i");
-  
+
   vTaskDelay(1000/portTICK_PERIOD_MS);
 }
 
@@ -163,7 +164,7 @@ void loop() {
 
   if(get_corresion_factor_energy){
     float energy = pzem.energy();
-    if(!isnan(energy) && energy > 0){
+    if(!isnan(energy) && energy >= 0.0  && energy < 20.0){
       corresion_factor_energy = energy;
       ESP_LOGI(TAG, "corresion_factor_energy: %f", corresion_factor_energy);
       get_corresion_factor_energy = false;
@@ -171,14 +172,14 @@ void loop() {
   }  
   
   float v = pzem.voltage();
-  float i = pzem.current();
+  float i = pzem.current() - cirresion_factor_current;
   float p = pzem.power();
   float e = pzem.energy() - corresion_factor_energy;
 
   bool validV = !isnan(v) && v >= 0.0 && v <= 260.0;
   bool validI = !isnan(i) && i >= 0.0  && i <= 100.0;
   bool validP = !isnan(p) && p >= 0.0  && p <= 5000.0;
-  bool validE = !isnan(e) && e >= 0.0  && e < 100000.0;
+  bool validE = !isnan(e) && e >= 0.0  && e < 1000.0;
 
   if (last_valid_voltage > 0 && fabs(v - last_valid_voltage) > 250) validV = false;
   if (last_valid_current > 0 && fabs(i - last_valid_current) > 5)  validI = false;
@@ -192,13 +193,15 @@ void loop() {
       last_valid_energy = e;
       data.energi = e;
       data.konsumsi_bulanan = data.last_konsumsi_bulanan + e;
+      data.konsumsi_harian = data.last_konsumsi_harian + e;
   } else {
       data.energi = last_valid_energy;
       data.konsumsi_bulanan = data.last_konsumsi_bulanan + last_valid_energy;
+      data.konsumsi_harian = data.last_konsumsi_harian + last_valid_energy;
   }
   // ESP_LOGI(TAG, "e: %f, corresion_factor_energy: %f, energi: %f, konsumsi_bulanan: %f", e, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
-  ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, konsumsi bulanan: %2f",
-     data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
+  // ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, konsumsi bulanan: %2f",
+  //    data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
   
   /*  INTRUKSI RELAY  */
   switch (state){
@@ -241,7 +244,7 @@ void loop() {
     break;
   }
 
-  ESP_LOGI(TAG, "status: %s, timer: %d, interval stanndby: %d", status_to_str(state), interval.timer, interval.standby);
+  // ESP_LOGI(TAG, "status: %s, timer: %d, interval stanndby: %d", status_to_str(state), interval.timer, interval.standby);
 
   /*  RESET BULANAN */
   if (now.month() != time_reset.last_reset_monthly){
@@ -277,6 +280,7 @@ void loop() {
     dbSendData("/powermeter/", payload, time_header);
 
     file_write("/last_konsumsi_bulanan.f", data.konsumsi_bulanan);
+    file_write("/last_konsumsi_harian.f", data.konsumsi_harian);
 
     interval.last_upload = millis();
   }
@@ -312,7 +316,7 @@ void loop() {
 
 
  /*   FORMAT SETTING JAM = TAHUN-BULAN-TANGGAL JAM:MENIT:DETIK 
-       example: 2025-11-15 16:41:20
+       example: 2026-03-15 14:16:00
        kirim via serial monitor                                   */
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
