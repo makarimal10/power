@@ -13,8 +13,8 @@ static const char* TAG = "MAIN";
 
 #define PIN_RELAY 27
 
-const char* db_host = "https://power-meter-738d5-default-rtdb.asia-southeast1.firebasedatabase.app/";
-const char* db_auth = "fqfVIk9G866nb8qfuTVnKeEA1KX1WX9hXDrODUSN";
+const char* db_host = "https://powerlogdata-default-rtdb.asia-southeast1.firebasedatabase.app/";
+const char* db_auth = "jgdhEngVhS57m6qEQ9Kcam8lnu8vVi4ASF7xQdxF";
 
 const char* ssid = "M23";
 const char* password = "11223344";
