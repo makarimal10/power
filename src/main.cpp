@@ -79,7 +79,7 @@ float last_valid_current = 0;
 float last_valid_power   = 0;
 float last_valid_energy  = 0;
 float corresion_factor_energy = 0;
-float cirresion_factor_current = 0.1;
+float cirresion_factor_current = 0.01;
 bool get_corresion_factor_energy = true;
 
 void reconnect();
