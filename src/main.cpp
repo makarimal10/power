@@ -79,7 +79,7 @@ float last_valid_current = 0;
 float last_valid_power   = 0;
 float last_valid_energy  = 0;
 float corresion_factor_energy = 0;
-float cirresion_factor_current = 0.01;
+float cirresion_factor_current = 0.00;
 bool get_corresion_factor_energy = true;
 
 void reconnect();
@@ -175,6 +175,7 @@ void loop() {
   float i = pzem.current() - cirresion_factor_current;
   float p = pzem.power();
   float e = pzem.energy() - corresion_factor_energy;
+  float pf = pzem.pf();
 
   bool validV = !isnan(v) && v >= 0.0 && v <= 260.0;
   bool validI = !isnan(i) && i >= 0.0  && i <= 100.0;
@@ -200,8 +201,8 @@ void loop() {
       data.konsumsi_harian = data.last_konsumsi_harian + last_valid_energy;
   }
   // ESP_LOGI(TAG, "e: %f, corresion_factor_energy: %f, energi: %f, konsumsi_bulanan: %f", e, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
-  // ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, konsumsi bulanan: %2f",
-  //    data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, data.konsumsi_bulanan);
+  ESP_LOGI(TAG, "arus: %3f, tegangan: %2f, daya: %2f, koreksi energi: %f, energi: %f, pf: %f, konsumsi bulanan: %2f",
+     data.arus, data.tegangan, data.daya, corresion_factor_energy, data.energi, pf, data.konsumsi_bulanan);
   
   /*  INTRUKSI RELAY  */
   switch (state){
@@ -269,8 +270,8 @@ void loop() {
   if (millis() - interval.last_upload > interval.upload_data * 1000UL){
     
     char payload[256];
-    snprintf(payload, sizeof(payload), "{\"arus\":%f,\"tegangan\":%f,\"daya\":%f,\"energi\":%f,\"konsumsi_harian\":%f,\"konsumsi_bulanan\":%f,\"timestamp\":\"%s\",\"device_state\":\"%s\"}", 
-      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_harian, data.konsumsi_bulanan, now.timestamp().c_str(), status_to_str(state));
+    snprintf(payload, sizeof(payload), "{\"arus\":%f,\"tegangan\":%f,\"daya\":%f,\"energi\":%f,\"konsumsi_harian\":%f,\"konsumsi_bulanan\":%f,\"pf\":%f,\"timestamp\":\"%s\",\"device_state\":\"%s\"}", 
+      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_harian, data.konsumsi_bulanan, pf, now.timestamp().c_str(), status_to_str(state));
     
     mqtt.publish("powermeter/data", payload);
 
