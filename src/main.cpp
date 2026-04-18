@@ -46,6 +46,7 @@ struct powermeter_data{
   float konsumsi_harian = 0;
   float last_konsumsi_bulanan = 0; 
   float last_konsumsi_harian = 0;
+  float power_factor = 0;
   char state[10];
 } data;
 
@@ -181,6 +182,7 @@ void loop() {
   bool validI = !isnan(i) && i >= 0.0  && i <= 100.0;
   bool validP = !isnan(p) && p >= 0.0  && p <= 5000.0;
   bool validE = !isnan(e) && e >= 0.0  && e < 1000.0;
+  bool validPF = !isnan(pf) && pf >= 0.0 && pf <= 1.0;
 
   if (last_valid_voltage > 0 && fabs(v - last_valid_voltage) > 250) validV = false;
   if (last_valid_current > 0 && fabs(i - last_valid_current) > 5)  validI = false;
@@ -189,6 +191,7 @@ void loop() {
   data.tegangan = validV ? (last_valid_voltage = v) : last_valid_voltage;
   data.arus     = validI ? (last_valid_current = i) : last_valid_current;
   data.daya     = validP ? (last_valid_power   = p) : last_valid_power;
+  data.power_factor = validPF ? pf : data.power_factor;
 
   if (validE) {
       last_valid_energy = e;
@@ -271,7 +274,7 @@ void loop() {
     
     char payload[256];
     snprintf(payload, sizeof(payload), "{\"arus\":%f,\"tegangan\":%f,\"daya\":%f,\"energi\":%f,\"konsumsi_harian\":%f,\"konsumsi_bulanan\":%f,\"pf\":%f,\"timestamp\":\"%s\",\"device_state\":\"%s\"}", 
-      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_harian, data.konsumsi_bulanan, pf, now.timestamp().c_str(), status_to_str(state));
+      data.arus, data.tegangan, data.daya, data.energi, data.konsumsi_harian, data.konsumsi_bulanan, data.power_factor, now.timestamp().c_str(), status_to_str(state));
     
     mqtt.publish("powermeter/data", payload);
 
