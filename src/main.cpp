@@ -255,7 +255,10 @@ void loop() {
     ESP_LOGI(TAG, "Berhasil reset data bulanan");
 
     data.last_konsumsi_bulanan = 0;
+    data.konsumsi_bulanan = 0;
+
     time_reset.last_reset_monthly = now.month();
+
     file_write("/last_konsumsi_bulanan.f", data.last_konsumsi_bulanan);
     file_write("/last_reset_monthly.i", now.month());
   }
@@ -263,6 +266,8 @@ void loop() {
   /*  RESET HARIAN  */
   if (now.day() != time_reset.last_reset_harian){
     data.konsumsi_harian = 0;
+    data.last_konsumsi_harian = 0;
+
     time_reset.last_reset_harian = now.day();
 
     file_write("/last_reset_harian.i", now.day());
