@@ -243,9 +243,9 @@ void loop() {
     digitalWrite(PIN_RELAY, LOW);
     break;
 
-  case maksimal:
-    digitalWrite(PIN_RELAY, LOW);
-    break;
+  // case maksimal:
+  //   digitalWrite(PIN_RELAY, LOW);
+  //   break;
   }
 
   // ESP_LOGI(TAG, "status: %s, timer: %d, interval stanndby: %d", status_to_str(state), interval.timer, interval.standby);
